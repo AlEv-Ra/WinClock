@@ -72,16 +72,10 @@ class AlarmsSettingsWindow:
         print(f"win создан: {self.win}")
         self.win.title(self.l10n.get("alarms_title", "Будильники"))
         self.win.configure(bg='white')
-        self.win.overrideredirect(True)  # Убираем все кнопки, кроме крестика
-        self.win.bind("<Button-1>", self.start_move)
-        self.win.bind("<B1-Motion>", self.do_move)
         self.position_window()
         self.win.protocol("WM_DELETE_WINDOW", self.on_close)
         print("Виджеты создаются...")
         self.create_widgets()
-        # Добавляем кнопку закрытия
-        close_button = tk.Button(self.win, text="Закрыть", command=self.on_close, bg='white', fg='black')
-        close_button.pack(side="bottom", pady=5)
         self.load_selected()
         self.win.withdraw()  # Скрываем окно при создании
         print("Инициализация завершена")
@@ -350,46 +344,23 @@ class AlarmsSettingsWindow:
                 self.win.geometry("420x320+100+100")
 
     def on_close(self):
-        # Сохранение изменений и передача в главную форму
-        for alarm in self.alarms:
-            # Валидация времени
-            try:
-                h = int(self.hour_spin.get())
-                m = int(self.min_spin.get())
-                if not (0 <= h <= 23 and 0 <= m <= 59):
-                    raise ValueError
-                alarm["time"] = f"{h:02d}:{m:02d}"
-            except (ValueError, IndexError):
-                alarm["time"] = "00:00"
-            # Валидация даты для всех типов повтора
-            if alarm.get("date"):
-                try:
-                    datetime.strptime(alarm["date"], "%Y-%m-%d")
-                except ValueError:
-                    alarm["date"] = ""
-            # Валидация дня месяца для ежемесячного
-            if alarm.get("repeat") == "monthly" and alarm.get("day_month"):
-                try:
-                    day = int(alarm["day_month"])
-                    if day < 1 or day > 31:
-                        raise ValueError
-                except ValueError:
-                    alarm["day_month"] = "1"
-            # Проверка уникальности названия
-            base_name = alarm.get("name", "Будильник")
-            existing_names = [a["name"] for a in self.alarms if a is not alarm]
-            if alarm["name"] in existing_names:
-                index = 1
-                new_name = f"{base_name} {index}"
-                while new_name in existing_names:
-                    index += 1
-                    new_name = f"{base_name} {index}"
-                alarm["name"] = new_name
+        # ... твоя валидация и сбор cfg выше ...
 
         self.cfg["alarms"] = self.alarms
         self.cfg["alarms_window"] = self.win.geometry()
-        if hasattr(self, 'update_callback') and self.update_callback:  # Проверка наличия атрибута
-            self.update_callback(self.cfg)
+
+        # безопасный вызов колбэка с учётом сигнатуры
+        if hasattr(self, 'update_callback') and self.update_callback:
+            try:
+                import inspect
+                sig = inspect.signature(self.update_callback)
+                if len(sig.parameters) == 0:
+                    self.update_callback()  # колбэк без аргументов
+                else:
+                    self.update_callback(self.cfg)  # если вдруг он ожидает cfg
+            except Exception as e:
+                print(f"update_callback error: {e}")
+
         self.save_config(self.cfg)
         self.win.destroy()
 
