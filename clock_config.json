@@ -1,0 +1,36 @@
+{
+  "window": {
+    "x": 2927,
+    "y": 243,
+    "width": 513,
+    "height": 394
+  },
+  "clocks": [
+    {
+      "title": "Москва",
+      "font": "Arial",
+      "font_size": 52,
+      "title_font_size": 28,
+      "date_font_size": 28,
+      "color": "#ffff80",
+      "timezone": "Europe/Moscow",
+      "time_format": "HH:mm:ss",
+      "date_format": "dd-MM-yyyy w"
+    },
+    {
+      "title": "Нови Сад",
+      "font": "Arial",
+      "font_size": 36,
+      "title_font_size": 12,
+      "date_font_size": 12,
+      "color": "#0080ff",
+      "timezone": "Europe/Belgrade",
+      "time_format": "HH:mm",
+      "date_format": ""
+    }
+  ],
+  "alarms": [],
+  "language": "ru",
+  "settings_window": "644x733+1994+832",
+  "alarms_window": "614x636+1697+454"
+}
