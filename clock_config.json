@@ -29,7 +29,28 @@
       "date_format": ""
     }
   ],
-  "alarms": [],
+  "alarms": [
+    {
+      "name": "Будильник 1",
+      "active": true,
+      "time": "00:31",
+      "timezone": "Europe/Moscow",
+      "repeat": "Однократно",
+      "days": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "day_month": "1",
+      "date": "2025-09-25",
+      "melody": "default",
+      "notification": "Тра-та-та"
+    }
+  ],
   "language": "ru",
   "settings_window": "644x733+1994+832",
   "alarms_window": "614x636+1758+627"

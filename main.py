@@ -75,18 +75,19 @@ class DigitalClockApp:
         self.update_bell_icon()
         self.update_time_loop()
 
+        self.check_alarms()
+
     def open_alarms_window(self):
-        if not hasattr(self, 'alarms') or self.alarms is None:
-            try:
-                self.alarms = AlarmsSettingsWindow(root=self.root, bell_label=self.bell_label, cfg=self.cfg,
-                                                   l10n=self.l10n, update_callback=self.update_bell_icon)
-            except Exception as e:
-                print(f"Ошибка при создании окна будильников: {e}")
-                return
-        if self.alarms and hasattr(self.alarms, 'win'):
-            self.alarms.win.deiconify()  # Показать окно, если оно было создано
+        if not hasattr(self, "alarms") or self.alarms is None or not self.alarms.win.winfo_exists():
+            self.alarms = AlarmsSettingsWindow(
+                self.root,
+                bell_label=self.bell_label,
+                cfg=self.cfg,
+                l10n=self.l10n,
+                update_callback=self.update_bell_icon
+            )
         else:
-            print("Окно будильников не инициализировано корректно")
+            self.alarms.win.deiconify()
 
     def set_default_timezone(self):
         # Установка часового пояса по умолчанию, если часы не настроены
@@ -278,6 +279,37 @@ class DigitalClockApp:
         # Закрытие программы
         self.root.destroy()
         sys.exit(0)
+
+    def check_alarms(self):
+        now = datetime.now()
+
+        # Берём актуальные будильники
+        if self.alarms and hasattr(self.alarms, "alarms"):
+            alarms = self.alarms.alarms
+        else:
+            alarms = self.cfg.get("alarms", [])
+
+        for alarm in alarms:
+            if not alarm.get("active", True):
+                continue
+            try:
+                alarm_time = datetime.strptime(f"{alarm['date']} {alarm['time']}", "%Y-%m-%d %H:%M")
+                if 0 <= (now - alarm_time).total_seconds() < 60:  # проверка до 1 минуты
+                    # показываем уведомление
+                    if self.alarms:
+                        self.alarms.show_notification(alarm)
+                    else:
+                        print("Будильник:", alarm.get("name"), "сработал!")
+                    # отключаем одноразовый
+                    if alarm.get("repeat", "once") == "once":
+                        alarm["active"] = False
+                    if self.alarms:
+                        self.alarms.update_alarm_list()
+                    self.update_bell_icon()
+            except Exception as e:
+                print("Ошибка проверки будильника:", e)
+
+        self.root.after(1000, self.check_alarms)
 
 
 if __name__ == "__main__":
