@@ -31,11 +31,11 @@
   ],
   "alarms": [
     {
-      "name": "Будильник 1",
+      "name": "",
       "active": true,
-      "time": "00:31",
-      "timezone": "Europe/Moscow",
-      "repeat": "Однократно",
+      "time": "00:00",
+      "timezone": "",
+      "repeat": "once",
       "days": [
         false,
         false,
@@ -46,9 +46,29 @@
         false
       ],
       "day_month": "1",
-      "date": "2025-09-25",
+      "date": "2025-09-28",
       "melody": "default",
-      "notification": "Тра-та-та"
+      "notification": ""
+    },
+    {
+      "name": "Будильник",
+      "time": "22:33",
+      "date": "2025-09-28",
+      "active": true,
+      "notification": "Это будильник",
+      "repeat": "Однократно",
+      "timezone": "Europe/Moscow",
+      "days": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "melody": "default",
+      "day_month": "1"
     }
   ],
   "language": "ru",

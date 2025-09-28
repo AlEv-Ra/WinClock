@@ -85,7 +85,12 @@ class AlarmsSettingsWindow:
         print("Виджеты создаются...")
         self.create_widgets()
         self.load_selected()
-        print("Инициализация завершена")
+        # выделяем первый будильник при старте, если список не пустой
+        if self.alarms:
+            self.alarm_list.selection_set(0)
+            self.alarm_list.activate(0)
+            self.selected_index.set(0)
+            self.on_listbox_select(None)
 
         self.start_alarm_checker()
 
@@ -353,6 +358,10 @@ class AlarmsSettingsWindow:
                 self.win.geometry("420x320+100+100")
 
     def on_close(self):
+        # Сначала обновляем данные текущего будильника
+        self.update_alarm_from_form()
+
+        # Сохраняем конфигурацию
         self.cfg["alarms"] = self.alarms
         self.cfg["alarms_window"] = self.win.geometry()
         if self.update_callback:
@@ -404,11 +413,25 @@ class AlarmsSettingsWindow:
         self.btn_timer.pack(side="left", padx=(2, 5), pady=5)
         ToolTip(self.btn_timer, self.l10n.get("timer", "Создать таймер"))
 
-        self.alarm_list = tk.Listbox(left_frame, width=25, height=10, exportselection=True, bg='white')
+        self.alarm_list = tk.Listbox(
+            left_frame,
+            width=25,
+            height=10,
+            exportselection=False,
+            selectmode="browse"
+        )
         self.alarm_list.pack(fill="both", expand=True, pady=(5, 0))
         self.alarm_list.bind("<<ListboxSelect>>", self.on_listbox_select)
-        self.alarm_list.bind("<Button-3>", self.show_context_menu)  # Контекстное меню правой кнопкой
+        self.alarm_list.bind("<Button-3>", self.show_context_menu)
+
         self.update_alarm_list()
+        self.alarm_list.focus_set()
+
+        if self.alarms:
+            self.alarm_list.selection_set(0)
+            self.alarm_list.activate(0)
+            self.alarm_list.focus_set()
+            self.selected_index.set(0)
 
         # Правая часть: Настройки будильника
         right_frame = tk.Frame(main_frame, bg='white', bd=2, relief="ridge")
@@ -526,6 +549,12 @@ class AlarmsSettingsWindow:
         self.day_month_spin.bind("<KeyRelease>", self.update_alarm_from_form)
         self.notification_entry.bind("<KeyRelease>", self.update_alarm_from_form)
 
+        self.name_entry.bind("<KeyRelease>", self.update_alarm_from_form)
+        self.timezone_combo.bind("<<ComboboxSelected>>", self.update_alarm_from_form)
+        self.repeat_combo.bind("<<ComboboxSelected>>", self.update_alarm_from_form)
+        self.day_month_spin.bind("<KeyRelease>", self.update_alarm_from_form)
+        self.notification_entry.bind("<KeyRelease>", self.update_alarm_from_form)
+
         self.update_repeat_fields()
 
     def update_repeat_fields(self, event=None):
@@ -552,13 +581,16 @@ class AlarmsSettingsWindow:
             self.active_switch.configure(style='Switch.Off.TCheckbutton')
 
     def update_alarm_list(self):
-        # Обновление списка будильников без Вкл/Выкл
         self.alarm_list.delete(0, tk.END)
         for i, alarm in enumerate(self.alarms):
-            self.alarm_list.insert(i, alarm["name"])
+            name = alarm.get("name") or f"Будильник {i + 1}"
+            self.alarm_list.insert(i, name)
             self.alarm_list.itemconfig(i, {'fg': 'black' if alarm.get("active", True) else 'gray'})
 
     def on_listbox_select(self, event):
+        # Сохраняем текущие изменения перед переключением
+        self.update_alarm_from_form()
+
         # Обновление настроек при выборе будильника
         if self.alarm_list.curselection():
             idx = self.alarm_list.curselection()[0]
@@ -587,6 +619,10 @@ class AlarmsSettingsWindow:
             self.update_active_color()
             self.update_repeat_fields()
 
+        # 🔥 После загрузки — сразу обновляем cfg
+        self.cfg["alarms"] = self.alarms
+        self.save_config(self.cfg)
+
     def add_alarm(self):
         # Добавление нового будильника с временем +1 час
         base_name = "Будильник"
@@ -606,7 +642,7 @@ class AlarmsSettingsWindow:
         if now.strftime("%H:%M") > alarm_time:
             default_date = (now + timedelta(days=1)).strftime("%Y-%m-%d")
         new_alarm = {
-            "name": new_name,
+            "name": new_name or "Будильник",
             "active": True,
             "time": alarm_time,
             "timezone": tz_name,
@@ -837,7 +873,7 @@ class AlarmsSettingsWindow:
         self.win.geometry(f"+{x}+{y}")
 
     def update_alarm_from_form(self, event=None):
-        if self.selected_index.get() >= 0 and self.selected_index.get() < len(self.alarms):
+        if 0 <= self.selected_index.get() < len(self.alarms):
             alarm = self.alarms[self.selected_index.get()]
             alarm["name"] = self.name_entry.get()
             alarm["time"] = f"{self.hour_spin.get()}:{self.min_spin.get()}"
@@ -849,12 +885,11 @@ class AlarmsSettingsWindow:
             alarm["notification"] = self.notification_entry.get()
             alarm["active"] = self.active_var.get()
 
-            # сразу обновляем список
             self.update_alarm_list()
 
-            # 🔥 ключевая добавка: синхронизируем с cfg
-            self.cfg["alarms"] = self.alarms
-            self.save_config(self.cfg)
+        # 🔥 В любом случае обновляем cfg и сохраняем
+        self.cfg["alarms"] = self.alarms
+        self.save_config(self.cfg)
 
     def get_alarm_text(self, alarm):
         """Возвращает текст уведомления"""
@@ -863,72 +898,107 @@ class AlarmsSettingsWindow:
         return f"{alarm.get('name', 'Будильник')} в {alarm.get('time', '00:00')}"
 
     def show_notification(self, alarm):
-        """Показывает уведомление в правом нижнем углу с отступом ~1–1.5 см и запускает звук."""
+        """Панель уведомления в стиле системных уведомлений."""
         win = tk.Toplevel(self.root)
         win.overrideredirect(True)
         win.configure(bg="white")
 
-        # Размер уведомления
-        width, height = 280, 120
+        # --- Делаем окно перетаскиваемым ---
+        def start_move(event):
+            win.x = event.x
+            win.y = event.y
 
-        # Отступ 1–1.5 см (умножаем сантиметры в пиксели)
-        try:
-            cm = self.root.winfo_fpixels('1c')  # пикселей в 1 см
-        except Exception:
-            cm = 38  # запасной вариант ~1см на 96dpi
-        margin = int(cm * 1.3)  # ~1.3 см
+        def do_move(event):
+            deltax = event.x - win.x
+            deltay = event.y - win.y
+            new_x = win.winfo_x() + deltax
+            new_y = win.winfo_y() + deltay
+            win.geometry(f"+{new_x}+{new_y}")
 
-        # Позиция (правый нижний угол)
-        screen_w = win.winfo_screenwidth()
-        screen_h = win.winfo_screenheight()
-        x = screen_w - width - margin
-        y = screen_h - height - margin
+        win.bind("<Button-1>", start_move)
+        win.bind("<B1-Motion>", do_move)
+        # -----------------------------------
+
+        width, height = 320, 180
+        cm = self.root.winfo_fpixels('1c') if hasattr(self.root, "winfo_fpixels") else 38
+        margin = int(cm * 1.3)
+        sw, sh = win.winfo_screenwidth(), win.winfo_screenheight()
+        x, y = sw - width - margin, sh - height - margin
         win.geometry(f"{width}x{height}+{x}+{y}")
 
+        # Заголовок
+        tk.Label(win, text=alarm.get("name", "Будильник"),
+                 font=("Segoe UI", 12, "bold"), bg="white", anchor="w").pack(fill="x", padx=10, pady=(8, 0))
+
         # Текст уведомления
-        text = self.get_alarm_text(alarm)
-        tk.Label(win, text=text, bg="white", font=("Arial", 12), wraplength=width - 20, justify="left").pack(padx=10,
-                                                                                                             pady=10,
-                                                                                                             fill="x")
+        text = alarm.get("notification") or alarm.get("name", "Сигнал")
+        tk.Label(win, text=text, font=("Segoe UI", 11),
+                 bg="white", anchor="w", wraplength=width - 20).pack(fill="x", padx=10, pady=(4, 0))
 
+        # Время
+        tk.Label(win, text=alarm.get("time", ""), font=("Segoe UI", 11),
+                 bg="white", anchor="w").pack(fill="x", padx=10, pady=(2, 8))
+
+        # Выпадающий список "Перенести на"
+        frame = tk.Frame(win, bg="white")
+        frame.pack(fill="x", padx=10)
+        tk.Label(frame, text="Перенести на", bg="white").pack(side="left")
+        delay_var = tk.StringVar(value="10 минут")
+        delay_box = ttk.Combobox(frame, textvariable=delay_var,
+                                 values=["5 минут", "10 минут", "15 минут", "30 минут"],
+                                 state="readonly", width=10)
+        delay_box.pack(side="right")
+
+        # Кнопки
         btns = tk.Frame(win, bg="white")
-        btns.pack(fill="x", padx=10, pady=(0, 10))
+        btns.pack(fill="x", padx=10, pady=(10, 8))
 
-        # Кнопка Стоп: останавливает звук И закрывает окно
-        tk.Button(btns, text="Стоп",
-                  command=lambda: self.stop_alarm(win)).pack(side="left", expand=True, fill="x", padx=(0, 5))
+        def stop():
+            # Останавливаем звук
+            self.stop_alarm_sound()
+            # Деактивируем будильник, если он одноразовый
+            if alarm.get("repeat", "once") == "once":
+                alarm["active"] = False
+            # Обновляем список и конфиг
+            self.update_alarm_list()
+            self.cfg["alarms"] = self.alarms
+            self.save_config(self.cfg)
+            if self.update_callback:
+                self.update_callback()
+            # Закрываем окно уведомления
+            win.destroy()
 
-        # Кнопка Отложить: сдвигает время, останавливает звук И закрывает окно
-        tk.Button(btns, text="Отложить на 5 мин",
-                  command=lambda: self.snooze_alarm(alarm, 5, win)).pack(side="right", expand=True, fill="x",
-                                                                         padx=(5, 0))
+        def snooze():
+            val = delay_var.get().split()[0]
+            try:
+                minutes = int(val)
+            except:
+                minutes = 5
+            self.snooze_alarm(alarm, minutes, win)
 
-        # Запускаем звук
+        ttk.Button(btns, text="Отложить", command=snooze).pack(side="left", expand=True, fill="x", padx=(0, 5))
+        ttk.Button(btns, text="Закрыть", command=stop).pack(side="right", expand=True, fill="x", padx=(5, 0))
+
+        # Запуск звука
         self.play_alarm_sound(alarm)
 
     def snooze_alarm(self, alarm, minutes, win):
-        """Сдвигает время будильника на указанное число минут, останавливает звук и закрывает уведомление."""
+        """Сдвигает время будильника на указанное количество минут."""
         try:
-            # если в alarm["date"] нет даты — ставим сегодня
             if not alarm.get("date"):
                 alarm["date"] = datetime.now().strftime("%Y-%m-%d")
-
-            # сдвигаем
             dt = datetime.now() + timedelta(minutes=minutes)
             alarm["time"] = dt.strftime("%H:%M")
             alarm["date"] = dt.strftime("%Y-%m-%d")
         except Exception as e:
             print("Ошибка snooze:", e)
 
-        # стоп звука и закрытие окна
         self.stop_alarm_sound()
         if win and win.winfo_exists():
             win.destroy()
-
         self.update_alarm_list()
-        # при желании можно сразу сохранить:
         self.cfg["alarms"] = self.alarms
-        self.save_config(self.cfg)
+        self.update_callback()
 
     def start_alarm_checker(self):
         """Запускает проверку будильников каждую секунду"""
@@ -978,7 +1048,7 @@ class AlarmsSettingsWindow:
     def stop_alarm_sound(self):
         """Останавливает звук будильника."""
         if platform.system() == "Windows" and winsound:
-            winsound.PlaySound(None, 0)  # стоп SND_ASYNC/SND_LOOP
+            winsound.PlaySound(None, 0)
 
 if __name__ == "__main__":
     # Самостоятельная отладка формы
