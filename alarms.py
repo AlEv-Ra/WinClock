@@ -6,6 +6,7 @@ import copy
 import os
 from datetime import datetime, timedelta
 from tkcalendar import DateEntry  # Требует установки: pip install tkcalendar
+from utils import ToolTip, play_sound, stop_alarm_sound
 
 import platform
 try:
@@ -16,47 +17,6 @@ except ImportError:
 
 # Путь к файлу конфигурации для отладки
 CONFIG_FILE = "alarms_config.json"
-
-class ToolTip:
-    def __init__(self, widget, text):
-        self.widget = widget
-        self.text = text
-        self.tip_window = None
-        self.widget.bind("<Enter>", self.show_tip)
-        self.widget.bind("<Leave>", self.hide_tip)
-
-    def show_tip(self, event=None):
-        if self.tip_window or not self.text:
-            return
-        x = self.widget.winfo_rootx() + 20
-        y = self.widget.winfo_rooty() + self.widget.winfo_height() + 5
-        self.tip_window = tw = tk.Toplevel(self.widget)
-        tw.wm_overrideredirect(True)
-        tw.wm_geometry(f"+{x}+{y}")
-        label = tk.Label(tw, text=self.text, justify="left", bg="#ffffe0", relief="solid", borderwidth=1, font=("Arial", 8))
-        label.pack()
-
-    def hide_tip(self, event=None):
-        if self.tip_window:
-            self.tip_window.destroy()
-            self.tip_window = None
-
-    @staticmethod
-    def position_dialog(widget):
-        # Позиционирование диалога рядом с кнопкой с контролем границ
-        x = widget.winfo_rootx()
-        y = widget.winfo_rooty() + widget.winfo_height() + 5
-        screen_width = widget.winfo_screenwidth()
-        screen_height = widget.winfo_screenheight()
-        dialog_width = 200
-        dialog_height = 150
-        if x + dialog_width > screen_width:
-            x = screen_width - dialog_width
-        if y + dialog_height > screen_height:
-            y = widget.winfo_rooty() - dialog_height - 5
-        if y < 0:
-            y = 0
-        return f"{dialog_width}x{dialog_height}+{x}+{y}"
 
 class AlarmsSettingsWindow:
     def __init__(self, root=None, bell_label=None, cfg=None, l10n=None, update_callback=None):
@@ -525,6 +485,10 @@ class AlarmsSettingsWindow:
         self.repeat_combo.bind("<<ComboboxSelected>>", self.update_alarm_from_form)
         self.day_month_spin.bind("<KeyRelease>", self.update_alarm_from_form)
         self.notification_entry.bind("<KeyRelease>", self.update_alarm_from_form)
+        self.hour_spin.bind("<KeyRelease>", self.update_alarm_from_form)
+        self.min_spin.bind("<KeyRelease>", self.update_alarm_from_form)
+
+
 
         self.update_repeat_fields()
 
@@ -868,52 +832,108 @@ class AlarmsSettingsWindow:
         win.overrideredirect(True)
         win.configure(bg="white")
 
-        # Размер уведомления
-        width, height = 280, 120
+        def _start_move(event):
+            win._x = event.x
+            win._y = event.y
 
-        # Отступ 1–1.5 см (умножаем сантиметры в пиксели)
+        def _do_move(event):
+            deltax = event.x - getattr(win, "_x", 0)
+            deltay = event.y - getattr(win, "_y", 0)
+            win.geometry(f"+{win.winfo_x() + deltax}+{win.winfo_y() + deltay}")
+
+        win.bind("<Button-1>", _start_move)
+        win.bind("<B1-Motion>", _do_move)
+
+        # Размер и позиция (правый нижний угол, ~1.3 см отступ)
+        width, height = 320, 180
         try:
-            cm = self.root.winfo_fpixels('1c')  # пикселей в 1 см
+            cm = self.root.winfo_fpixels('1c')
         except Exception:
-            cm = 38  # запасной вариант ~1см на 96dpi
-        margin = int(cm * 1.3)  # ~1.3 см
-
-        # Позиция (правый нижний угол)
-        screen_w = win.winfo_screenwidth()
-        screen_h = win.winfo_screenheight()
-        x = screen_w - width - margin
-        y = screen_h - height - margin
+            cm = 38  # fallback
+        margin = int(cm * 1.3)
+        sw, sh = win.winfo_screenwidth(), win.winfo_screenheight()
+        x, y = sw - width - margin, sh - height - margin
         win.geometry(f"{width}x{height}+{x}+{y}")
 
+        # Заголовок — имя будильника
+        tk.Label(
+            win, text=alarm.get("name", "Будильник"),
+            font=("Segoe UI", 12, "bold"), bg="white", anchor="w"
+        ).pack(fill="x", padx=10, pady=(8, 0))
+
         # Текст уведомления
-        text = self.get_alarm_text(alarm)
-        tk.Label(win, text=text, bg="white", font=("Arial", 12), wraplength=width - 20, justify="left").pack(padx=10,
-                                                                                                             pady=10,
-                                                                                                             fill="x")
+        text = alarm.get("notification") or alarm.get("name", "Сигнал")
+        tk.Label(
+            win, text=text, font=("Segoe UI", 11),
+            bg="white", anchor="w", wraplength=width - 20, justify="left"
+        ).pack(fill="x", padx=10, pady=(4, 0))
 
+        # Время
+        tk.Label(
+            win, text=alarm.get("time", ""), font=("Segoe UI", 11),
+            bg="white", anchor="w"
+        ).pack(fill="x", padx=10, pady=(2, 8))
+
+        # Выпадающий список "Перенести на"
+        frame = tk.Frame(win, bg="white")
+        frame.pack(fill="x", padx=10)
+        tk.Label(frame, text="Перенести на", bg="white").pack(side="left")
+        delay_var = tk.StringVar(value="10 минут")
+        delay_box = ttk.Combobox(
+            frame, textvariable=delay_var,
+            values=["5 минут", "10 минут", "15 минут", "30 минут"],
+            state="readonly", width=10
+        )
+        delay_box.pack(side="right")
+
+        # Кнопки
         btns = tk.Frame(win, bg="white")
-        btns.pack(fill="x", padx=10, pady=(0, 10))
+        btns.pack(fill="x", padx=10, pady=(10, 8))
 
-        # Кнопка Стоп: останавливает звук И закрывает окно
-        tk.Button(btns, text="Стоп",
-                  command=lambda: self.stop_alarm(win)).pack(side="left", expand=True, fill="x", padx=(0, 5))
+        def _stop():
+            # Останавливаем звук
+            self.stop_alarm_sound()
+            # Деактивируем будильник, если он одноразовый
+            if alarm.get("repeat", "once") == "once":
+                alarm["active"] = False
+            # Обновляем список и сохраняем конфиг
+            self.update_alarm_list()
+            self.cfg["alarms"] = self.alarms
+            self.save_config(self.cfg)
+            if self.update_callback:
+                try:
+                    self.update_callback()
+                except Exception as e:
+                    print("update_callback error:", e)
+            # Закрываем окно
+            if win and win.winfo_exists():
+                win.destroy()
 
-        # Кнопка Отложить: сдвигает время, останавливает звук И закрывает окно
-        tk.Button(btns, text="Отложить на 5 мин",
-                  command=lambda: self.snooze_alarm(alarm, 5, win)).pack(side="right", expand=True, fill="x",
-                                                                         padx=(5, 0))
+        def _snooze():
+            raw = delay_var.get().split()[0]
+            try:
+                minutes = int(raw)
+            except Exception:
+                minutes = 5
+            self.snooze_alarm(alarm, minutes, win)
 
-        # Запускаем звук
-        self.play_alarm_sound(alarm)
+        ttk.Button(btns, text="Отложить", command=_snooze).pack(
+            side="left", expand=True, fill="x", padx=(0, 5)
+        )
+        ttk.Button(btns, text="Закрыть", command=_stop).pack(
+            side="right", expand=True, fill="x", padx=(5, 0)
+        )
+
+        # Запускаем звук (SystemAsterisk, цикл на Windows)
+        play_sound(alarm.get("melody"), self.root)
 
     def snooze_alarm(self, alarm, minutes, win):
-        """Сдвигает время будильника на указанное число минут, останавливает звук и закрывает уведомление."""
+        """Сдвигает время будильника на minutes, останавливает звук, закрывает уведомление, обновляет список/конфиг."""
         try:
-            # если в alarm["date"] нет даты — ставим сегодня
+            # если нет даты — ставим сегодня
             if not alarm.get("date"):
                 alarm["date"] = datetime.now().strftime("%Y-%m-%d")
 
-            # сдвигаем
             dt = datetime.now() + timedelta(minutes=minutes)
             alarm["time"] = dt.strftime("%H:%M")
             alarm["date"] = dt.strftime("%Y-%m-%d")
@@ -925,10 +945,15 @@ class AlarmsSettingsWindow:
         if win and win.winfo_exists():
             win.destroy()
 
+        # Обновляем список и конфиг
         self.update_alarm_list()
-        # при желании можно сразу сохранить:
         self.cfg["alarms"] = self.alarms
         self.save_config(self.cfg)
+        if self.update_callback:
+            try:
+                self.update_callback()
+            except Exception as e:
+                print("update_callback error:", e)
 
     def start_alarm_checker(self):
         """Запускает проверку будильников каждую секунду"""
@@ -953,32 +978,11 @@ class AlarmsSettingsWindow:
 
     def stop_alarm(self, notif_win):
         """Обработчик кнопки Стоп: остановить звук и закрыть окно уведомления."""
-        self.stop_alarm_sound()
+        stop_alarm_sound()
         if notif_win and notif_win.winfo_exists():
             notif_win.destroy()
 
-    def play_alarm_sound(self, alarm=None):
-        """Запускает звук будильника. По умолчанию — системный звук (Windows), в цикле."""
-        # Если пользователь когда-то добавит WAV-файл — можно будет проигрывать его:
-        # if alarm and alarm.get("melody") and os.path.exists(alarm["melody"]) and alarm["melody"].lower().endswith(".wav") and winsound:
-        #     winsound.PlaySound(alarm["melody"], winsound.SND_FILENAME | winsound.SND_ASYNC | winsound.SND_LOOP)
-        #     return
 
-        # По умолчанию — системный звук
-        if platform.system() == "Windows" and winsound:
-            # Один из стандартных системных звуков: "SystemAsterisk" / "SystemExclamation" / "SystemHand"
-            winsound.PlaySound("SystemAsterisk", winsound.SND_ALIAS | winsound.SND_ASYNC | winsound.SND_LOOP)
-        else:
-            # Кроссплатформенное «пикание» без цикла
-            try:
-                self.root.bell()
-            except Exception:
-                pass
-
-    def stop_alarm_sound(self):
-        """Останавливает звук будильника."""
-        if platform.system() == "Windows" and winsound:
-            winsound.PlaySound(None, 0)  # стоп SND_ASYNC/SND_LOOP
 
 if __name__ == "__main__":
     # Самостоятельная отладка формы
