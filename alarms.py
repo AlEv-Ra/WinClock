@@ -6,6 +6,7 @@ import copy
 import os
 from datetime import datetime, timedelta
 from tkcalendar import DateEntry  # Требует установки: pip install tkcalendar
+from config import load_config, save_config, LANGUAGES, DEFAULT_LANGUAGE
 
 import platform
 try:
@@ -13,71 +14,23 @@ try:
 except ImportError:
     winsound = None
 
+from utils import ToolTip, play_sound
+
 
 # Путь к файлу конфигурации для отладки
 CONFIG_FILE = "alarms_config.json"
 
-class ToolTip:
-    def __init__(self, widget, text):
-        self.widget = widget
-        self.text = text
-        self.tip_window = None
-        self.widget.bind("<Enter>", self.show_tip)
-        self.widget.bind("<Leave>", self.hide_tip)
-
-    def show_tip(self, event=None):
-        if self.tip_window or not self.text:
-            return
-        x = self.widget.winfo_rootx() + 20
-        y = self.widget.winfo_rooty() + self.widget.winfo_height() + 5
-        self.tip_window = tw = tk.Toplevel(self.widget)
-        tw.wm_overrideredirect(True)
-        tw.wm_geometry(f"+{x}+{y}")
-        label = tk.Label(tw, text=self.text, justify="left", bg="#ffffe0", relief="solid", borderwidth=1, font=("Arial", 8))
-        label.pack()
-
-    def hide_tip(self, event=None):
-        if self.tip_window:
-            self.tip_window.destroy()
-            self.tip_window = None
-
-    @staticmethod
-    def position_dialog(widget):
-        # Позиционирование диалога рядом с кнопкой с контролем границ
-        x = widget.winfo_rootx()
-        y = widget.winfo_rooty() + widget.winfo_height() + 5
-        screen_width = widget.winfo_screenwidth()
-        screen_height = widget.winfo_screenheight()
-        dialog_width = 200
-        dialog_height = 150
-        if x + dialog_width > screen_width:
-            x = screen_width - dialog_width
-        if y + dialog_height > screen_height:
-            y = widget.winfo_rooty() - dialog_height - 5
-        if y < 0:
-            y = 0
-        return f"{dialog_width}x{dialog_height}+{x}+{y}"
 
 class AlarmsSettingsWindow:
     def __init__(self, root=None, bell_label=None, cfg=None, l10n=None, update_callback=None):
-        print("Инициализация AlarmsSettingsWindow...")
         self.root = root or tk.Tk()
-        print(f"root: {self.root}")
         self.bell_label = bell_label
-        print(f"bell_label: {self.bell_label}")
-        self.cfg = cfg or self.load_config()
-        print(f"cfg: {self.cfg}")
-        self.l10n = l10n or self.load_l10n()
-        print(f"l10n: {self.l10n}")
+        self.cfg = cfg or {}
+        self.l10n = l10n or LANGUAGES.get(self.cfg.get("language", DEFAULT_LANGUAGE), LANGUAGES["ru"])
         self.alarms = copy.deepcopy(self.cfg.get("alarms", []))
-        print(f"alarms: {self.alarms}")
         self.selected_index = tk.IntVar(value=0 if self.alarms else -1)
-        print(f"selected_index: {self.selected_index.get()}")
         self.update_callback = update_callback
-        print(f"update_callback: {self.update_callback}")
-
         self.win = tk.Toplevel(self.root) if root else self.root
-        print(f"win создан: {self.win}")
         self.win.title(self.l10n.get("alarms_title", "Будильники"))
         self.win.configure(bg='white')
         self.position_window()
@@ -89,216 +42,6 @@ class AlarmsSettingsWindow:
 
         self.start_alarm_checker()
 
-    def load_config(self):
-        # Загрузка конфигурации для отладки
-        cfg = {
-            "alarms": [],
-            "alarms_window": "420x320+100+100",
-            "language": "ru",
-            "clocks": [{"timezone": "Europe/Moscow"}]  # Для отладки, по умолчанию первый часовой пояс
-        }
-        if os.path.exists(CONFIG_FILE):
-            try:
-                with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-                    loaded = json.load(f)
-                    cfg.update(loaded)
-            except Exception:
-                pass
-        return cfg
-
-    def save_config(self, cfg):
-        # Сохранение конфигурации для отладки
-        try:
-            with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-                json.dump(cfg, f, ensure_ascii=False, indent=2)
-        except Exception:
-            pass
-
-    def load_l10n(self):
-        # Загрузка локализации для отладки (дополняем существующий словарь)
-        LANGUAGES = {
-            "en": {
-                "settings_title": "Settings",
-                "alarms_title": "Alarms",
-                "selected_clock": "Selected clock settings:",
-                "title": "Title:",
-                "font": "Font (name):",
-                "font_size": "Font size:",
-                "title_font_size": "Title font size:",
-                "date_font_size": "Date font size:",
-                "color": "Color:",
-                "timezone": "Timezone:",
-                "choose_color": "Choose color",
-                "save_changes": "Save changes",
-                "add": "Add",
-                "remove": "Remove",
-                "language": "Language:",
-                "alarm_time": "Enter time HH:MM",
-                "alarm_date": "Date",
-                "periodicity": "Periodicity:",
-                "once": "Once",
-                "weekly": "Weekly",
-                "monthly": "Monthly",
-                "yearly": "Yearly",
-                "toggle": "Toggle On/Off",
-                "alarm": "Alarm",
-                "melody": "Melody:",
-                "default": "default",
-                "stop": "Stop",
-                "snooze": "Snooze 5 min",
-                "invalid_time": "Invalid time format",
-                "invalid_date": "Invalid date format",
-                "confirm_remove": "Remove selected clock?",
-                "saved": "Settings saved",
-                "select_clock": "Select a clock first",
-                "tooltip_add": "Add a new clock",
-                "tooltip_remove": "Remove selected clock",
-                "tooltip_move_up": "Move clock up",
-                "tooltip_move_down": "Move clock down",
-                "date_format": "Date format",
-                "time_format": "Time format",
-                "tooltip_date_format": "dd - day, MM - month, yyyy - year (4 digits), yy - year (2 digits), w - short day name, W - full day name",
-                "tooltip_time_format": "HH:mm:ss - 24-hour, hh:mm:ss p - 12-hour with AM/PM",
-                "reset_default": "Reset to default",
-                "exit": "Закрыть программу",
-                "confirm_exit": "Are you sure you want to close the program?",
-                "days_short": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],  # С понедельника
-                "days_full": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],  # С понедельника
-                # Новые ключи для формы будильников
-                "notification": "Notification:",
-                "timer": "Timer",
-                "export": "Export",
-                "import": "Import",
-                "clear_all": "Clear All",
-                "confirm_clear": "Clear all alarms?",
-                "day_month": "Day of Month:",
-                "yearly_date": "Date",
-                "tooltip_hours": "Set hours (00-23)",
-                "tooltip_minutes": "Set minutes (00-59)",
-                "tooltip_edit_note": "Edit notification text"
-            },
-            "ru": {
-                "settings_title": "Настройки",
-                "alarms_title": "Будильники",
-                "selected_clock": "Настройки выбранных часов:",
-                "title": "Название:",
-                "font": "Шрифт (имя):",
-                "font_size": "Размер шрифта:",
-                "title_font_size": "Размер шрифта заголовка:",
-                "date_font_size": "Размер шрифта даты:",
-                "color": "Цвет:",
-                "timezone": "Часовой пояс:",
-                "choose_color": "Выбрать цвет",
-                "save_changes": "Сохранить изменения",
-                "add": "Добавить",
-                "remove": "Удалить",
-                "language": "Язык:",
-                "alarm_time": "Введите время ЧЧ:ММ",
-                "alarm_date": "Дата",
-                "periodicity": "Периодичность:",
-                "once": "Однократно",
-                "weekly": "Еженедельно",
-                "monthly": "Ежемесячно",
-                "yearly": "Ежегодно",
-                "toggle": "Вкл/Выкл",
-                "alarm": "Будильник",
-                "melody": "Мелодия:",
-                "default": "по умолчанию",
-                "stop": "Стоп",
-                "snooze": "Отложить на 5 мин",
-                "invalid_time": "Неверный формат времени",
-                "invalid_date": "Неверный формат даты",
-                "confirm_remove": "Удалить выбранные часы?",
-                "saved": "Настройки сохранены",
-                "select_clock": "Сначала выберите часы",
-                "tooltip_add": "Добавить новые часы",
-                "tooltip_remove": "Удалить выбранные часы",
-                "tooltip_move_up": "Переместить часы вверх",
-                "tooltip_move_down": "Переместить часы вниз",
-                "date_format": "Формат даты",
-                "time_format": "Формат времени",
-                "tooltip_date_format": "dd - день, MM - месяц, yyyy - год (4 цифры), yy - год (2 цифры), w - короткое название дня, W - полное название дня",
-                "tooltip_time_format": "HH:mm:ss - 24-часовой, hh:mm:ss p - 12-часовой с AM/PM",
-                "reset_default": "По умолчанию",
-                "exit": "Закрыть программу",
-                "confirm_exit": "Вы действительно хотите закрыть программу?",
-                "days_short": ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"],  # С понедельника
-                "days_full": ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"],  # С понедельника
-                # Новые ключи для формы будильников
-                "notification": "Уведомление:",
-                "timer": "Таймер",
-                "export": "Экспорт",
-                "import": "Импорт",
-                "clear_all": "Очистить все",
-                "confirm_clear": "Очистить все будильники?",
-                "day_month": "День месяца:",
-                "yearly_date": "Дата",
-                "tooltip_hours": "Установить часы (00-23)",
-                "tooltip_minutes": "Установить минуты (00-59)",
-                "tooltip_edit_note": "Редактировать текст уведомления"
-            },
-            "sr_latn": {
-                "settings_title": "Podešavanja",
-                "alarms_title": "Budilnici",
-                "selected_clock": "Podešavanja izabranog sata:",
-                "title": "Naziv:",
-                "font": "Font (ime):",
-                "font_size": "Veličina fonta:",
-                "title_font_size": "Veličina fonta naslova:",
-                "date_font_size": "Veličina fonta datuma:",
-                "color": "Boja:",
-                "timezone": "Vremenska zona:",
-                "choose_color": "Izaberi boju",
-                "save_changes": "Sačuvaj promene",
-                "add": "Dodaj",
-                "remove": "Ukloni",
-                "language": "Jezik:",
-                "alarm_time": "Unesite vreme ČČ:MM",
-                "alarm_date": "Datum",
-                "periodicity": "Periodičnost:",
-                "once": "Jednom",
-                "weekly": "Nedeljno",
-                "monthly": "Mesečno",
-                "yearly": "Godišnje",
-                "toggle": "Uklj/Isklj",
-                "alarm": "Budilnik",
-                "melody": "Melodija:",
-                "default": "podrazumevano",
-                "stop": "Stop",
-                "snooze": "Odloži 5 min",
-                "invalid_time": "Nevažeći format vremena",
-                "invalid_date": "Nevažeći format datuma",
-                "confirm_remove": "Ukloniti izabrani sat?",
-                "saved": "Podešavanja sačuvana",
-                "select_clock": "Prvo izaberite sat",
-                "tooltip_add": "Dodaj novi sat",
-                "tooltip_remove": "Ukloni izabrani sat",
-                "tooltip_move_up": "Pomeri sat gore",
-                "tooltip_move_down": "Pomeri sat dole",
-                "date_format": "Format datuma",
-                "time_format": "Format vremena",
-                "tooltip_date_format": "dd - dan, MM - mesec, yyyy - godina (4 cifre), yy - godina (2 cifre), w - kratki naziv dana, W - puni naziv dana",
-                "tooltip_time_format": "HH:mm:ss - 24-časovni, hh:mm:ss p - 12-часovni sa AM/PM",
-                "reset_default": "Podrazumevano",
-                "exit": "Закрыть программу",
-                "confirm_exit": "Da li ste sigurni da želite zatvoriti program?",
-                "days_short": ["Pon", "Uto", "Sre", "Čet", "Pet", "Sub", "Ned"],  # С понедельника
-                "days_full": ["Ponedeljak", "Utorak", "Sreda", "Četvrtak", "Petak", "Subota", "Nedelja"],  # С понедельника
-                # Новые ключи для формы будильников
-                "notification": "Obaveštenje:",
-                "timer": "Tajmer",
-                "export": "Izvoz",
-                "import": "Uvoz",
-                "clear_all": "Očisti sve",
-                "confirm_clear": "Očistiti sve budilnike?",
-                "day_month": "Dan meseca:",
-                "yearly_date": "Datum",
-                "tooltip_hours": "Postavi sate (00-23)",
-                "tooltip_minutes": "Postavi minute (00-59)",
-                "tooltip_edit_note": "Uredi tekst obaveštenja"
-            }
-        }
-        return LANGUAGES.get(self.cfg.get("language", "ru"), LANGUAGES["ru"])
 
     def position_window(self):
         # Позиционирование формы будильников
@@ -360,7 +103,7 @@ class AlarmsSettingsWindow:
                 self.update_callback()
             except Exception as e:
                 print("update_callback error:", e)
-        self.save_config(self.cfg)
+        save_config(self.cfg)
         self.win.destroy()
 
     def create_widgets(self):
@@ -854,7 +597,7 @@ class AlarmsSettingsWindow:
 
             # 🔥 ключевая добавка: синхронизируем с cfg
             self.cfg["alarms"] = self.alarms
-            self.save_config(self.cfg)
+            save_config(self.cfg)
 
     def get_alarm_text(self, alarm):
         """Возвращает текст уведомления"""
@@ -904,7 +647,7 @@ class AlarmsSettingsWindow:
                                                                          padx=(5, 0))
 
         # Запускаем звук
-        self.play_alarm_sound(alarm)
+        play_sound(alarm.get("melody"), self.root)
 
     def snooze_alarm(self, alarm, minutes, win):
         """Сдвигает время будильника на указанное число минут, останавливает звук и закрывает уведомление."""
@@ -928,7 +671,7 @@ class AlarmsSettingsWindow:
         self.update_alarm_list()
         # при желании можно сразу сохранить:
         self.cfg["alarms"] = self.alarms
-        self.save_config(self.cfg)
+        save_config(self.cfg)
 
     def start_alarm_checker(self):
         """Запускает проверку будильников каждую секунду"""
@@ -956,24 +699,6 @@ class AlarmsSettingsWindow:
         self.stop_alarm_sound()
         if notif_win and notif_win.winfo_exists():
             notif_win.destroy()
-
-    def play_alarm_sound(self, alarm=None):
-        """Запускает звук будильника. По умолчанию — системный звук (Windows), в цикле."""
-        # Если пользователь когда-то добавит WAV-файл — можно будет проигрывать его:
-        # if alarm and alarm.get("melody") and os.path.exists(alarm["melody"]) and alarm["melody"].lower().endswith(".wav") and winsound:
-        #     winsound.PlaySound(alarm["melody"], winsound.SND_FILENAME | winsound.SND_ASYNC | winsound.SND_LOOP)
-        #     return
-
-        # По умолчанию — системный звук
-        if platform.system() == "Windows" and winsound:
-            # Один из стандартных системных звуков: "SystemAsterisk" / "SystemExclamation" / "SystemHand"
-            winsound.PlaySound("SystemAsterisk", winsound.SND_ALIAS | winsound.SND_ASYNC | winsound.SND_LOOP)
-        else:
-            # Кроссплатформенное «пикание» без цикла
-            try:
-                self.root.bell()
-            except Exception:
-                pass
 
     def stop_alarm_sound(self):
         """Останавливает звук будильника."""
