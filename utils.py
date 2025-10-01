@@ -1,6 +1,6 @@
 import os
 import platform
-import time
+import tkinter as tk
 try:
     if platform.system() == "Windows":
         import winsound

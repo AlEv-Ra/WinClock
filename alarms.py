@@ -40,8 +40,6 @@ class AlarmsSettingsWindow:
         self.load_selected()
         print("Инициализация завершена")
 
-        self.start_alarm_checker()
-
 
     def position_window(self):
         # Позиционирование формы будильников
@@ -147,7 +145,7 @@ class AlarmsSettingsWindow:
         self.btn_timer.pack(side="left", padx=(2, 5), pady=5)
         ToolTip(self.btn_timer, self.l10n.get("timer", "Создать таймер"))
 
-        self.alarm_list = tk.Listbox(left_frame, width=25, height=10, exportselection=True, bg='white')
+        self.alarm_list = tk.Listbox(left_frame, width=25, height=10, exportselection=False, bg='white')
         self.alarm_list.pack(fill="both", expand=True, pady=(5, 0))
         self.alarm_list.bind("<<ListboxSelect>>", self.on_listbox_select)
         self.alarm_list.bind("<Button-3>", self.show_context_menu)  # Контекстное меню правой кнопкой
@@ -158,57 +156,64 @@ class AlarmsSettingsWindow:
         right_frame.pack(side="right", fill="both", expand=True, padx=5, pady=5)
 
         # Исправлена компоновка: все элементы в одной колонке
-        self.name_label = tk.Label(right_frame, text=self.l10n.get("title", "Название:"), bg='white', font=("Arial", 10, "bold"))
+        self.name_label = tk.Label(right_frame, text=self.l10n.get("title", "Название:"), bg='white',
+                                   font=("Arial", 10, "bold"))
         self.name_label.pack(anchor="w", padx=5, pady=(5, 2))
         self.name_entry = tk.Entry(right_frame)
         self.name_entry.pack(fill="x", padx=5, pady=(0, 5))
+        self.name_entry.bind("<KeyRelease>", self.update_alarm_from_form)  # 🔥 сразу сохраняем
 
         # Активность как сдвигающийся переключатель в одной строке
         self.active_frame = tk.Frame(right_frame, bg='white')
         self.active_var = tk.BooleanVar(value=True)
         self.active_switch = ttk.Checkbutton(self.active_frame, variable=self.active_var, style='Switch.TCheckbutton')
         self.active_switch.pack(side="left", padx=2)
-        self.active_label = tk.Label(self.active_frame, text=self.l10n.get("active", "Активность"), bg='white', font=("Arial", 10))
+        self.active_label = tk.Label(self.active_frame, text=self.l10n.get("active", "Активность"), bg='white',
+                                     font=("Arial", 10))
         self.active_label.pack(side="left", padx=2)
         self.active_frame.pack(anchor="w", padx=5, pady=(5, 2))
-        self.active_switch.config(command=self.update_active_color)
-        self.active_var.trace('w', self.update_active_color)
+        self.active_switch.config(command=self.update_alarm_from_form)  # 🔥 сразу сохраняем
+        self.active_var.trace('w', lambda *a: self.update_alarm_from_form())  # 🔥 сразу сохраняем
 
-        self.time_label = tk.Label(right_frame, text=self.l10n.get("time", "Время:"), bg='white', font=("Arial", 10, "bold"))
+        self.time_label = tk.Label(right_frame, text=self.l10n.get("time", "Время:"), bg='white',
+                                   font=("Arial", 10, "bold"))
         self.time_label.pack(anchor="w", padx=5, pady=(5, 2))
         self.time_frame = tk.Frame(right_frame, bg='white')
 
-        self.hour_spin = tk.Spinbox(self.time_frame, from_=0, to=23, width=2, format="%02.0f", wrap=True)
+        self.hour_spin = tk.Spinbox(self.time_frame, from_=0, to=23, width=2, format="%02.0f", wrap=True,
+                                    command=self.update_alarm_from_form)  # 🔥
         self.hour_spin.bind("<KeyRelease>", self.update_alarm_from_form)
-        self.hour_spin.bind("<<Increment>>", self.update_alarm_from_form)
-        self.hour_spin.bind("<<Decrement>>", self.update_alarm_from_form)
-
         ToolTip(self.hour_spin, self.l10n.get("tooltip_hours", "Установить часы (00-23)"))
         self.hour_spin.pack(side="left", padx=2)
 
         tk.Label(self.time_frame, text=":", bg='white').pack(side="left", padx=1)
 
-        self.min_spin = tk.Spinbox(self.time_frame, from_=0, to=59, width=2, format="%02.0f", wrap=True)
+        self.min_spin = tk.Spinbox(self.time_frame, from_=0, to=59, width=2, format="%02.0f", wrap=True,
+                                   command=self.update_alarm_from_form)  # 🔥
         self.min_spin.bind("<KeyRelease>", self.update_alarm_from_form)
-        self.min_spin.bind("<<Increment>>", self.update_alarm_from_form)
-        self.min_spin.bind("<<Decrement>>", self.update_alarm_from_form)
         ToolTip(self.min_spin, self.l10n.get("tooltip_minutes", "Установить минуты (00-59)"))
         self.min_spin.pack(side="left", padx=2)
 
         self.time_frame.pack(anchor="w", padx=5, pady=(0, 5))
 
-        self.timezone_label = tk.Label(right_frame, text=self.l10n.get("timezone", "Часовой пояс:"), bg='white', font=("Arial", 10, "bold"))
+        self.timezone_label = tk.Label(right_frame, text=self.l10n.get("timezone", "Часовой пояс:"), bg='white',
+                                       font=("Arial", 10, "bold"))
         self.timezone_label.pack(anchor="w", padx=5, pady=(5, 2))
-        self.timezone_combo = ttk.Combobox(right_frame, values=[clock["timezone"] for clock in self.cfg.get("clocks", [{"timezone": "Europe/Moscow"}])])
+        self.timezone_combo = ttk.Combobox(right_frame, values=[clock["timezone"] for clock in self.cfg.get("clocks", [
+            {"timezone": "Europe/Moscow"}])])
         ToolTip(self.timezone_combo, self.l10n.get("tooltip_time_format", "HH:mm:ss - 24-часовой"))
         self.timezone_combo.pack(fill="x", padx=5, pady=(0, 5))
+        self.timezone_combo.bind("<<ComboboxSelected>>", self.update_alarm_from_form)  # 🔥
 
-        self.repeat_label = tk.Label(right_frame, text=self.l10n.get("periodicity", "Периодичность:"), bg='white', font=("Arial", 10, "bold"))
+        self.repeat_label = tk.Label(right_frame, text=self.l10n.get("periodicity", "Периодичность:"), bg='white',
+                                     font=("Arial", 10, "bold"))
         self.repeat_label.pack(anchor="w", padx=5, pady=(5, 2))
         self.repeat_var = tk.StringVar(value="once")
-        self.repeat_combo = ttk.Combobox(right_frame, textvariable=self.repeat_var, values=[self.l10n.get("once"), self.l10n.get("weekly"), self.l10n.get("monthly"), self.l10n.get("yearly")], state="readonly")
+        self.repeat_combo = ttk.Combobox(right_frame, textvariable=self.repeat_var,
+                                         values=[self.l10n.get("once"), self.l10n.get("weekly"),
+                                                 self.l10n.get("monthly"), self.l10n.get("yearly")], state="readonly")
         self.repeat_combo.pack(fill="x", padx=5, pady=(0, 5))
-        self.repeat_combo.bind("<<ComboboxSelected>>", self.update_repeat_fields)
+        self.repeat_combo.bind("<<ComboboxSelected>>", self.update_alarm_from_form)  # 🔥
 
         # Блок выбора даты/числа/дней под Повтор
         self.date_frame = tk.Frame(right_frame, bg='white')
@@ -216,23 +221,26 @@ class AlarmsSettingsWindow:
         self.date_label.pack(side="top", pady=2)
         self.date_entry = DateEntry(self.date_frame, date_pattern="y-mm-dd", state="normal")
         self.date_entry.pack(side="top", pady=2)
+        self.date_entry.bind("<<DateEntrySelected>>", self.update_alarm_from_form)  # 🔥
         self.date_frame.pack(anchor="w", padx=5, pady=(0, 5))
 
         self.weekly_frame = tk.Frame(right_frame, bg='white')
-        self.days_labels = [tk.Label(self.weekly_frame, text=day, bg='white') for day in self.l10n.get("days_short", ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"])]
+        self.days_labels = [tk.Label(self.weekly_frame, text=day, bg='white') for day in
+                            self.l10n.get("days_short", ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"])]
         self.days_vars = [tk.BooleanVar() for _ in range(7)]
         for i, (label, var) in enumerate(zip(self.days_labels, self.days_vars)):
             label.pack(side="left", padx=2)
-            chk = tk.Checkbutton(self.weekly_frame, variable=var, bg='white')
+            chk = tk.Checkbutton(self.weekly_frame, variable=var, bg='white',
+                                 command=self.update_alarm_from_form)  # 🔥 сразу сохраняем
             chk.pack(side="left", padx=2)
         self.weekly_frame.pack(anchor="w", padx=5, pady=(0, 5))
 
         self.monthly_frame = tk.Frame(right_frame, bg='white')
         self.monthly_label = tk.Label(self.monthly_frame, text=self.l10n.get("day_month", "День месяца:"), bg='white')
         self.monthly_label.pack(side="top", pady=2)
-        self.day_month_spin = tk.Spinbox(self.monthly_frame, from_=1, to=31, width=5)
-        self.day_month_spin.delete(0, tk.END)
-        self.day_month_spin.insert(0, "1")
+        self.day_month_spin = tk.Spinbox(self.monthly_frame, from_=1, to=31, width=5,
+                                         command=self.update_alarm_from_form)  # 🔥
+        self.day_month_spin.bind("<KeyRelease>", self.update_alarm_from_form)
         self.day_month_spin.pack(side="top", pady=2)
         self.monthly_frame.pack(anchor="w", padx=5, pady=(0, 5))
 
@@ -241,33 +249,33 @@ class AlarmsSettingsWindow:
         self.yearly_label.pack(side="top", pady=2)
         self.yearly_date_entry = DateEntry(self.yearly_frame, date_pattern="y-mm-dd", state="normal")
         self.yearly_date_entry.pack(side="top", pady=2)
+        self.yearly_date_entry.bind("<<DateEntrySelected>>", self.update_alarm_from_form)  # 🔥
         self.yearly_frame.pack(anchor="w", padx=5, pady=(0, 5))
 
-        self.melody_label = tk.Label(right_frame, text=self.l10n.get("melody", "Мелодия:"), bg='white', font=("Arial", 10, "bold"))
+        self.melody_label = tk.Label(right_frame, text=self.l10n.get("melody", "Мелодия:"), bg='white',
+                                     font=("Arial", 10, "bold"))
         self.melody_label.pack(anchor="w", padx=5, pady=(5, 2))
         self.melody_var = tk.StringVar(value="default")
-        self.melody_combo = ttk.Combobox(right_frame, textvariable=self.melody_var, values=["default", "bell1", "bell2"], state="readonly")
+        self.melody_combo = ttk.Combobox(right_frame, textvariable=self.melody_var,
+                                         values=["default", "bell1", "bell2"], state="readonly")
         ToolTip(self.melody_combo, self.l10n.get("tooltip_time_format", "Выберите мелодию"))
         self.melody_combo.pack(fill="x", padx=5, pady=(0, 5))
+        self.melody_combo.bind("<<ComboboxSelected>>", self.update_alarm_from_form)  # 🔥
         self.choose_melody_btn = tk.Button(right_frame, text="Выбрать файл", command=self.choose_melody_file)
         ToolTip(self.choose_melody_btn, "Выберите MP3 файл")
         self.choose_melody_btn.pack(fill="x", padx=5, pady=(0, 5))
 
-        self.notification_label = tk.Label(right_frame, text=self.l10n.get("notification", "Уведомление:"), bg='white', font=("Arial", 10, "bold"))
+        self.notification_label = tk.Label(right_frame, text=self.l10n.get("notification", "Уведомление:"), bg='white',
+                                           font=("Arial", 10, "bold"))
         self.notification_label.pack(anchor="w", padx=5, pady=(5, 2))
         self.notification_frame = tk.Frame(right_frame, bg='white')
         self.notification_entry = tk.Entry(self.notification_frame, width=20)
         self.notification_entry.pack(side="left", padx=5)
+        self.notification_entry.bind("<KeyRelease>", self.update_alarm_from_form)  # 🔥
         self.edit_note_btn = tk.Button(self.notification_frame, text="...", command=self.edit_notification)
         ToolTip(self.edit_note_btn, self.l10n.get("tooltip_edit_note", "Редактировать текст уведомления"))
         self.edit_note_btn.pack(side="left", padx=5)
         self.notification_frame.pack(fill="x", padx=5, pady=(0, 5))
-
-        self.name_entry.bind("<KeyRelease>", self.update_alarm_from_form)
-        self.timezone_combo.bind("<<ComboboxSelected>>", self.update_alarm_from_form)
-        self.repeat_combo.bind("<<ComboboxSelected>>", self.update_alarm_from_form)
-        self.day_month_spin.bind("<KeyRelease>", self.update_alarm_from_form)
-        self.notification_entry.bind("<KeyRelease>", self.update_alarm_from_form)
 
         self.update_repeat_fields()
 
@@ -295,40 +303,59 @@ class AlarmsSettingsWindow:
             self.active_switch.configure(style='Switch.Off.TCheckbutton')
 
     def update_alarm_list(self):
-        # Обновление списка будильников без Вкл/Выкл
         self.alarm_list.delete(0, tk.END)
         for i, alarm in enumerate(self.alarms):
             self.alarm_list.insert(i, alarm["name"])
             self.alarm_list.itemconfig(i, {'fg': 'black' if alarm.get("active", True) else 'gray'})
 
-    def on_listbox_select(self, event):
-        # Обновление настроек при выборе будильника
-        if self.alarm_list.curselection():
-            idx = self.alarm_list.curselection()[0]
-            self.selected_index.set(idx)
-            alarm = self.alarms[idx]
-            self.name_entry.delete(0, tk.END)
-            self.name_entry.insert(0, alarm.get("name", "Будильник"))
-            self.active_var.set(alarm.get("active", True))
-            time_parts = alarm.get("time", "00:00").split(":")
-            self.hour_spin.delete(0, tk.END)
-            self.hour_spin.insert(0, time_parts[0])
-            self.min_spin.delete(0, tk.END)
-            self.min_spin.insert(0, time_parts[1])
-            self.timezone_combo.set(alarm.get("timezone", self.cfg["clocks"][0]["timezone"] if self.cfg.get("clocks") else "Europe/Moscow"))
-            self.repeat_var.set(alarm.get("repeat", "once"))
-            if "days" in alarm:
-                for i, var in enumerate(self.days_vars):
-                    var.set(alarm["days"][i] if i < len(alarm["days"]) else False)
-            self.day_month_spin.delete(0, tk.END)
-            self.day_month_spin.insert(0, alarm.get("day_month", "1"))
-            self.date_entry.set_date(datetime.strptime(alarm.get("date", datetime.now().strftime("%Y-%m-%d")), "%Y-%m-%d").date() if alarm.get("date") else datetime.now().date())
-            self.yearly_date_entry.set_date(datetime.strptime(alarm.get("date", datetime.now().strftime("%Y-%m-%d")), "%Y-%m-%d").date() if alarm.get("date") else datetime.now().date())
-            self.melody_var.set(alarm.get("melody", "default"))
-            self.notification_entry.delete(0, tk.END)
-            self.notification_entry.insert(0, alarm.get("notification", ""))
-            self.update_active_color()
-            self.update_repeat_fields()
+        if self.alarms:
+            if self.selected_index.get() < 0 or self.selected_index.get() >= len(self.alarms):
+                self.selected_index.set(0)
+
+            idx = self.selected_index.get()
+            self.alarm_list.selection_clear(0, tk.END)
+            self.alarm_list.selection_set(idx)
+            self.alarm_list.activate(idx)
+            self.alarm_list.see(idx)  # всегда видимая строка
+            self.alarm_list.focus_set()
+
+    def on_listbox_select(self, event=None):
+        if not self.alarm_list.curselection():
+            return
+        idx = self.alarm_list.curselection()[0]
+        self.selected_index.set(idx)
+        alarm = self.alarms[idx]
+
+        self.name_entry.delete(0, tk.END)
+        self.name_entry.insert(0, alarm.get("name", "Будильник"))
+        self.active_var.set(alarm.get("active", True))
+
+        time_parts = alarm.get("time", "00:00").split(":")
+        self.hour_spin.delete(0, tk.END)
+        self.hour_spin.insert(0, time_parts[0])
+        self.min_spin.delete(0, tk.END)
+        self.min_spin.insert(0, time_parts[1])
+
+        self.timezone_combo.set(alarm.get("timezone", "Europe/Moscow"))
+        self.repeat_var.set(alarm.get("repeat", "once"))
+
+        for i, var in enumerate(self.days_vars):
+            var.set(alarm.get("days", [False] * 7)[i])
+
+        self.day_month_spin.delete(0, tk.END)
+        self.day_month_spin.insert(0, alarm.get("day_month", "1"))
+
+        self.date_entry.set_date(
+            datetime.strptime(alarm.get("date", datetime.now().strftime("%Y-%m-%d")), "%Y-%m-%d").date())
+        self.yearly_date_entry.set_date(
+            datetime.strptime(alarm.get("date", datetime.now().strftime("%Y-%m-%d")), "%Y-%m-%d").date())
+
+        self.melody_var.set(alarm.get("melody", "default"))
+        self.notification_entry.delete(0, tk.END)
+        self.notification_entry.insert(0, alarm.get("notification", ""))
+
+        self.update_active_color()
+        self.update_repeat_fields()
 
     def add_alarm(self):
         # Добавление нового будильника с временем +1 час
@@ -499,7 +526,24 @@ class AlarmsSettingsWindow:
         tk.Button(dialog, text="Отмена", command=dialog.destroy).pack(pady=5)
 
     def load_selected(self):
-        # Загрузка настроек выбранного будильника
+        if self.selected_index.get() < 0 or self.selected_index.get() >= len(self.alarms):
+            # Нет будильников → чистим и блокируем
+            self.name_entry.delete(0, tk.END)
+            self.name_entry.insert(0, "")
+            self.active_var.set(False)
+            self.hour_spin.delete(0, tk.END)
+            self.hour_spin.insert(0, "00")
+            self.min_spin.delete(0, tk.END)
+            self.min_spin.insert(0, "00")
+            self.notification_entry.delete(0, tk.END)
+            self.notification_entry.insert(0, "")
+            self.set_form_state(False)  # тут блокировка
+            return
+        else:
+            self.set_form_state(True)  # разблокировка
+            self.on_listbox_select(None)
+
+        """# Загрузка настроек выбранного будильника
         if self.selected_index.get() < 0 or self.selected_index.get() >= len(self.alarms):
             self.name_entry.delete(0, tk.END)
             self.name_entry.insert(0, "Будильник")
@@ -522,7 +566,7 @@ class AlarmsSettingsWindow:
             self.update_active_color()
             self.update_repeat_fields()
         else:
-            self.on_listbox_select(None)
+            self.on_listbox_select(None)"""
 
     def show_context_menu(self, event):
         # Контекстное меню для списка будильников
@@ -580,9 +624,10 @@ class AlarmsSettingsWindow:
         self.win.geometry(f"+{x}+{y}")
 
     def update_alarm_from_form(self, event=None):
-        if self.selected_index.get() >= 0 and self.selected_index.get() < len(self.alarms):
+        if 0 <= self.selected_index.get() < len(self.alarms):
             alarm = self.alarms[self.selected_index.get()]
             alarm["name"] = self.name_entry.get()
+            alarm["active"] = self.active_var.get()
             alarm["time"] = f"{self.hour_spin.get()}:{self.min_spin.get()}"
             alarm["timezone"] = self.timezone_combo.get()
             alarm["repeat"] = self.repeat_var.get()
@@ -590,14 +635,22 @@ class AlarmsSettingsWindow:
             alarm["date"] = str(self.date_entry.get_date())
             alarm["melody"] = self.melody_var.get()
             alarm["notification"] = self.notification_entry.get()
-            alarm["active"] = self.active_var.get()
-
-            # сразу обновляем список
+            alarm["days"] = [var.get() for var in self.days_vars]  # <-- добавь это!
             self.update_alarm_list()
 
-            # 🔥 ключевая добавка: синхронизируем с cfg
-            self.cfg["alarms"] = self.alarms
-            save_config(self.cfg)
+    def set_form_state(self, enabled=True):
+        state = "normal" if enabled else "disabled"
+        widgets = [
+            self.name_entry, self.hour_spin, self.min_spin, self.timezone_combo,
+            self.repeat_combo, self.day_month_spin, self.date_entry,
+            self.yearly_date_entry, self.melody_combo, self.choose_melody_btn,
+            self.notification_entry, self.edit_note_btn
+        ]
+        for w in widgets:
+            try:
+                w.config(state=state)
+            except Exception:
+                pass
 
     def get_alarm_text(self, alarm):
         """Возвращает текст уведомления"""
@@ -672,27 +725,6 @@ class AlarmsSettingsWindow:
         # при желании можно сразу сохранить:
         self.cfg["alarms"] = self.alarms
         save_config(self.cfg)
-
-    def start_alarm_checker(self):
-        """Запускает проверку будильников каждую секунду"""
-        self.check_alarms()
-        self.root.after(1000, self.start_alarm_checker)
-
-    def check_alarms(self):
-        """Проверяет, не пора ли запустить будильники"""
-        now = datetime.now()
-        for alarm in self.alarms:
-            if not alarm.get("active", True):
-                continue
-            try:
-                alarm_time = datetime.strptime(f"{alarm['date']} {alarm['time']}", "%Y-%m-%d %H:%M")
-                if abs((now - alarm_time).total_seconds()) < 1:  # точность до секунды
-                    self.show_notification(alarm)
-                    if alarm.get("repeat", "once") == "once":
-                        alarm["active"] = False  # выключаем одноразовый
-                    self.update_alarm_list()
-            except Exception as e:
-                print("Ошибка проверки будильника:", e)
 
     def stop_alarm(self, notif_win):
         """Обработчик кнопки Стоп: остановить звук и закрыть окно уведомления."""
