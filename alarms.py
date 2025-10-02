@@ -19,93 +19,107 @@ from utils import ToolTip, play_sound
 
 # Путь к файлу конфигурации для отладки
 CONFIG_FILE = "alarms_config.json"
+# дефолтная геометрия формы
+DEFAULT_GEOMETRY = (420, 320, 100, 100)  # width, height, x, y
 
+# Проверка, что форма не вылазит за пределы окна
+def fit_into_screen(x, y, width, height, screen_w, screen_h, margin=10):
+    """Возвращает координаты, скорректированные так, чтобы окно не вылазило за экран."""
+    if x < 0:
+        x = margin
+    if y < 0:
+        y = margin
+    if x + width > screen_w:
+        x = screen_w - width - margin
+    if y + height > screen_h:
+        y = screen_h - height - margin
+    return x, y
 
 class AlarmsSettingsWindow:
     def __init__(self, root=None, bell_label=None, cfg=None, l10n=None, update_callback=None):
+        # корневое окно программы
         self.root = root or tk.Tk()
+        # кнопка будильника рядом с котрой открывается окно
         self.bell_label = bell_label
+        # словарь с конфигурацией будильников
         self.cfg = cfg or {}
+        # словарь локализации
         self.l10n = l10n or LANGUAGES.get(self.cfg.get("language", DEFAULT_LANGUAGE), LANGUAGES["ru"])
+        # локальная копия списка будильников. Каждый будильник - словарь с настройками
         self.alarms = copy.deepcopy(self.cfg.get("alarms", []))
+        # индекс выбранного будильника
         self.selected_index = tk.IntVar(value=0 if self.alarms else -1)
+        # функция, которая вернет результат при закрытии окна
         self.update_callback = update_callback
+
         self.win = tk.Toplevel(self.root) if root else self.root
         self.win.title(self.l10n.get("alarms_title", "Будильники"))
         self.win.configure(bg='white')
         self.position_window()
+        # Подменяем уничтожение окна на процедуру закрытия
         self.win.protocol("WM_DELETE_WINDOW", self.on_close)
-        print("Виджеты создаются...")
+
+        # создание виджетов
         self.create_widgets()
         self.load_selected()
-        print("Инициализация завершена")
-
 
     def position_window(self):
-        # Позиционирование формы будильников
-        screen_width = self.win.winfo_screenwidth()
-        screen_height = self.win.winfo_screenheight()
-        form_width = 420
-        form_height = 320
+        """Позиционирование формы будильников"""
+        screen_w = self.win.winfo_screenwidth()
+        screen_h = self.win.winfo_screenheight()
+        form_w, form_h, def_x, def_y = DEFAULT_GEOMETRY
+
+        # 1. Пробуем восстановить сохранённую геометрию
         try:
-            geom = self.cfg.get("alarms_window", "420x320+100+100")
-            parts = geom.replace("x", "+").split("+")
-            width, height, pos_x, pos_y = map(int, parts)
-            if (0 <= pos_x < screen_width - 50 and 0 <= pos_y < screen_height - 50 and
-                width > 0 and height > 0):
-                self.win.geometry(geom)
-                return
-        except:
-            pass
-        # Позиция рядом с кнопкой (если задана)
+            geom = self.cfg.get("alarms_window")
+            if geom:
+                w, h, x, y = map(int, geom.replace("x", "+").split("+"))
+                if w > 0 and h > 0:
+                    x, y = fit_into_screen(x, y, w, h, screen_w, screen_h)
+                    self.win.geometry(f"{w}x{h}+{x}+{y}")
+                    return
+        except Exception as e:
+            print("Ошибка восстановления позиции:", e)
+
+        # 2. Пробуем расположить около колокольчика
         if self.bell_label:
             try:
                 bell_x = self.bell_label.winfo_rootx()
                 bell_y = self.bell_label.winfo_rooty()
-                bell_height = self.bell_label.winfo_height()
+                bell_h = self.bell_label.winfo_height()
                 positions = [
-                    (bell_x - form_width - 10, bell_y - form_height // 2),
-                    (bell_x - form_width - 10, bell_y + bell_height // 2),
-                    (bell_x + 10, bell_y - form_height // 2),
-                    (bell_x + 10, bell_y + bell_height // 2)
+                    (bell_x - form_w - 10, bell_y - form_h // 2),
+                    (bell_x + 10, bell_y - form_h // 2),
+                    (bell_x - form_w // 2, bell_y + bell_h + 10)
                 ]
-                best_position = None
-                max_visible_area = 0
-                for pos_x, pos_y in positions:
-                    if pos_x < 0:
-                        pos_x = 0
-                    if pos_y < 0:
-                        pos_y = 0
-                    if pos_x + form_width > screen_width:
-                        pos_x = screen_width - form_width
-                    if pos_y + form_height > screen_height:
-                        pos_y = screen_height - form_height
-                    visible_width = min(pos_x + form_width, screen_width) - max(pos_x, 0)
-                    visible_height = min(pos_y + form_height, screen_height) - max(pos_y, 0)
-                    visible_area = visible_width * visible_height
-                    if visible_area > max_visible_area:
-                        max_visible_area = visible_area
-                        best_position = (pos_x, pos_y)
-                if best_position:
-                    self.win.geometry(f"420x320+{best_position[0]}+{best_position[1]}")
-                else:
-                    self.win.geometry("420x320+100+100")
-            except:
-                self.win.geometry("420x320+100+100")
+                for x, y in positions:
+                    x, y = fit_into_screen(x, y, form_w, form_h, screen_w, screen_h)
+                    self.win.geometry(f"{form_w}x{form_h}+{x}+{y}")
+                    return
+            except Exception as e:
+                print("Ошибка позиционирования рядом с иконкой:", e)
+
+        # 3. Дефолтная позиция
+        x, y = fit_into_screen(def_x, def_y, form_w, form_h, screen_w, screen_h)
+        self.win.geometry(f"{form_w}x{form_h}+{x}+{y}")
 
     def on_close(self):
-        self.cfg["alarms"] = self.alarms
-        self.cfg["alarms_window"] = self.win.geometry()
+        # готовим пакет данных для передачи
+        result = {
+            "alarms": copy.deepcopy(self.alarms),  # список будильников
+            "alarms_window": self.win.geometry()  # геометрия окна
+        }
+
+        # если есть callback – отдадим наружу
         if self.update_callback:
             try:
-                self.update_callback()
+                self.update_callback(result)
             except Exception as e:
                 print("update_callback error:", e)
-        save_config(self.cfg)
         self.win.destroy()
 
     def create_widgets(self):
-        # Создание элементов интерфейса формы будильников
+        """ Создание элементов интерфейса формы будильников """
         canvas = tk.Canvas(self.win, bg='white')
         scrollbar = ttk.Scrollbar(self.win, orient="vertical", command=canvas.yview)
         scrollable_frame = tk.Frame(canvas, bg='white')

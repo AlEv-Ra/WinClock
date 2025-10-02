@@ -84,10 +84,15 @@ class DigitalClockApp:
                 bell_label=self.bell_label,
                 cfg=self.cfg,
                 l10n=self.l10n,
-                update_callback=self.update_bell_icon
+                update_callback=self.on_alarms_closed
             )
         else:
             self.alarms.win.deiconify()
+
+    def on_alarms_closed(self, data):
+        # получили все изменения из окна будильников
+        self.cfg["alarms"] = data["alarms"]
+        self.cfg["alarms_window"] = data["alarms_window"]
 
     def set_default_timezone(self):
         # Установка часового пояса по умолчанию, если часы не настроены
