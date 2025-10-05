@@ -5,7 +5,7 @@ import json
 import copy
 import os
 from datetime import datetime, timedelta
-from tkcalendar import DateEntry  # Требует установки: pip install tkcalendar
+from tkcalendar import Calendar
 from config import load_config, save_config, LANGUAGES, DEFAULT_LANGUAGE
 
 import platform
@@ -136,6 +136,7 @@ class AlarmsSettingsWindow:
         left_frame = tk.Frame(main_frame, bg='white')
         left_frame.pack(side="left", fill="y", padx=(0, 8))
 
+        # кнопки над списком будильников
         btn_frame = tk.Frame(left_frame, bg='white')
         btn_frame.pack(fill="x", padx=5, pady=5)
         btn_add = tk.Button(btn_frame, text="➕", command=self.add_alarm, width=5, font=("Arial", 12), fg="green")
@@ -154,10 +155,6 @@ class AlarmsSettingsWindow:
         menu.add_command(label=self.l10n.get("import", "Импорт"), command=self.import_alarms)
         menu_btn.config(menu=menu)
         ToolTip(menu_btn, "Файл (Экспорт/Импорт)")
-        self.btn_timer = tk.Button(btn_frame, text="⏲️", command=self.open_timer_dialog, width=5, font=("Arial", 12),
-                                   fg="blue")
-        self.btn_timer.pack(side="left", padx=(2, 5), pady=5)
-        ToolTip(self.btn_timer, self.l10n.get("timer", "Создать таймер"))
 
         self.alarm_list = tk.Listbox(left_frame, width=25, height=10, exportselection=False, bg='white')
         self.alarm_list.pack(fill="both", expand=True, pady=(5, 0))
@@ -169,47 +166,68 @@ class AlarmsSettingsWindow:
         right_frame = tk.Frame(main_frame, bg='white', bd=2, relief="ridge")
         right_frame.pack(side="right", fill="both", expand=True, padx=5, pady=5)
 
-        # Исправлена компоновка: все элементы в одной колонке
-        self.name_label = tk.Label(right_frame, text=self.l10n.get("title", "Название:"), bg='white',
+        # Название будильника
+        self.name_label = tk.Label(right_frame, text=self.l10n.get("title", "БУдильник:"), bg='white',
                                    font=("Arial", 10, "bold"))
         self.name_label.pack(anchor="w", padx=5, pady=(5, 2))
         self.name_entry = tk.Entry(right_frame)
         self.name_entry.pack(fill="x", padx=5, pady=(0, 5))
-        self.name_entry.bind("<KeyRelease>", self.update_alarm_from_form)  # 🔥 сразу сохраняем
+        self.name_entry.bind("<KeyRelease>", self.update_alarm_from_form)
 
         # Активность как сдвигающийся переключатель в одной строке
         self.active_frame = tk.Frame(right_frame, bg='white')
         self.active_var = tk.BooleanVar(value=True)
         self.active_switch = ttk.Checkbutton(self.active_frame, variable=self.active_var, style='Switch.TCheckbutton')
         self.active_switch.pack(side="left", padx=2)
-        self.active_label = tk.Label(self.active_frame, text=self.l10n.get("active", "Активность"), bg='white',
+        self.active_label = tk.Label(self.active_frame, text=self.l10n.get("active", "Вкл"), bg='white',
                                      font=("Arial", 10))
         self.active_label.pack(side="left", padx=2)
         self.active_frame.pack(anchor="w", padx=5, pady=(5, 2))
-        self.active_switch.config(command=self.update_alarm_from_form)  # 🔥 сразу сохраняем
-        self.active_var.trace('w', lambda *a: self.update_alarm_from_form())  # 🔥 сразу сохраняем
+        self.active_switch.config(command=self.update_alarm_from_form)
+        self.active_var.trace('w', lambda *a: self.update_alarm_from_form())
 
+        # Установка часов
         self.time_label = tk.Label(right_frame, text=self.l10n.get("time", "Время:"), bg='white',
                                    font=("Arial", 10, "bold"))
         self.time_label.pack(anchor="w", padx=5, pady=(5, 2))
+        # контейнер для часов и минут
         self.time_frame = tk.Frame(right_frame, bg='white')
-
-        self.hour_spin = tk.Spinbox(self.time_frame, from_=0, to=23, width=2, format="%02.0f", wrap=True,
-                                    command=self.update_alarm_from_form)  # 🔥
+        self.time_frame.pack(fill="x", padx=5, pady=(0, 5))  # растягиваем по ширине
+        # часы
+        self.hour_spin = tk.Spinbox(
+            self.time_frame,
+            from_=0, to=23,
+            format="%02.0f",
+            wrap=True,
+            font=("Arial", 18, "bold"),  # крупный жирный шрифт
+            width=4,  #  немного шире
+            justify="center",  #  выравнивание по центру
+            command=self.update_alarm_from_form
+        )
         self.hour_spin.bind("<KeyRelease>", self.update_alarm_from_form)
         ToolTip(self.hour_spin, self.l10n.get("tooltip_hours", "Установить часы (00-23)"))
-        self.hour_spin.pack(side="left", padx=2)
-
+        # self.hour_spin.pack(side="left", padx=2)
+        self.hour_spin.pack(side="left", expand=True, fill="x", padx=5)  # растягивается влево
+        # Разделитель часов и минут
         tk.Label(self.time_frame, text=":", bg='white').pack(side="left", padx=1)
-
-        self.min_spin = tk.Spinbox(self.time_frame, from_=0, to=59, width=2, format="%02.0f", wrap=True,
-                                   command=self.update_alarm_from_form)  # 🔥
+        # Минуты
+        self.min_spin = tk.Spinbox(
+            self.time_frame,
+            from_=0, to=59,
+            format="%02.0f",
+            wrap=True,
+            font=("Arial", 18, "bold"),  # ⬅️ тот же крупный стиль
+            width=4,
+            justify="center",
+            command=self.update_alarm_from_form)
         self.min_spin.bind("<KeyRelease>", self.update_alarm_from_form)
         ToolTip(self.min_spin, self.l10n.get("tooltip_minutes", "Установить минуты (00-59)"))
-        self.min_spin.pack(side="left", padx=2)
+        # self.min_spin.pack(side="left", padx=2)
+        self.min_spin.pack(side="left", expand=True, fill="x", padx=5)  # ⬅️ растягивается вправо
 
         self.time_frame.pack(anchor="w", padx=5, pady=(0, 5))
 
+        # Временная зона
         self.timezone_label = tk.Label(right_frame, text=self.l10n.get("timezone", "Часовой пояс:"), bg='white',
                                        font=("Arial", 10, "bold"))
         self.timezone_label.pack(anchor="w", padx=5, pady=(5, 2))
@@ -219,53 +237,94 @@ class AlarmsSettingsWindow:
         self.timezone_combo.pack(fill="x", padx=5, pady=(0, 5))
         self.timezone_combo.bind("<<ComboboxSelected>>", self.update_alarm_from_form)  # 🔥
 
-        self.repeat_label = tk.Label(right_frame, text=self.l10n.get("periodicity", "Периодичность:"), bg='white',
-                                     font=("Arial", 10, "bold"))
-        self.repeat_label.pack(anchor="w", padx=5, pady=(5, 2))
-        self.repeat_var = tk.StringVar(value="once")
-        self.repeat_combo = ttk.Combobox(right_frame, textvariable=self.repeat_var,
-                                         values=[self.l10n.get("once"), self.l10n.get("weekly"),
-                                                 self.l10n.get("monthly"), self.l10n.get("yearly")], state="readonly")
-        self.repeat_combo.pack(fill="x", padx=5, pady=(0, 5))
-        self.repeat_combo.bind("<<ComboboxSelected>>", self.update_alarm_from_form)  # 🔥
+        # блок управления повторами
+        # --- Повторение / дата ---
+        self.repeat_frame = tk.Frame(right_frame, bg='white')
+        self.repeat_frame.pack(fill="x", padx=5, pady=(5, 5))
 
-        # Блок выбора даты/числа/дней под Повтор
-        self.date_frame = tk.Frame(right_frame, bg='white')
-        self.date_label = tk.Label(self.date_frame, text=self.l10n.get("alarm_date", "Дата"), bg='white')
-        self.date_label.pack(side="top", pady=2)
-        self.date_entry = DateEntry(self.date_frame, date_pattern="y-mm-dd", state="normal")
-        self.date_entry.pack(side="top", pady=2)
-        self.date_entry.bind("<<DateEntrySelected>>", self.update_alarm_from_form)  # 🔥
-        self.date_frame.pack(anchor="w", padx=5, pady=(0, 5))
+        # Метка с описанием (динамически обновляется)
+        self.repeat_text = tk.StringVar()
+        self.repeat_label = tk.Label(
+            self.repeat_frame,
+            textvariable=self.repeat_text,
+            bg='white',
+            font=("Arial", 10, "bold"),
+            anchor="w"
+        )
+        self.repeat_label.pack(side="left", fill="x", expand=True)
 
-        self.weekly_frame = tk.Frame(right_frame, bg='white')
-        self.days_labels = [tk.Label(self.weekly_frame, text=day, bg='white') for day in
-                            self.l10n.get("days_short", ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"])]
-        self.days_vars = [tk.BooleanVar() for _ in range(7)]
-        for i, (label, var) in enumerate(zip(self.days_labels, self.days_vars)):
-            label.pack(side="left", padx=2)
-            chk = tk.Checkbutton(self.weekly_frame, variable=var, bg='white',
-                                 command=self.update_alarm_from_form)  # 🔥 сразу сохраняем
-            chk.pack(side="left", padx=2)
-        self.weekly_frame.pack(anchor="w", padx=5, pady=(0, 5))
+        # Кнопка календаря
+        self.date_btn = tk.Button(
+            self.repeat_frame,
+            text="📅",
+            font=("Arial", 12),
+            command=self.choose_date,
+            relief="flat",
+            bg='white'
+        )
+        self.date_btn.pack(side="right", padx=5)
 
-        self.monthly_frame = tk.Frame(right_frame, bg='white')
-        self.monthly_label = tk.Label(self.monthly_frame, text=self.l10n.get("day_month", "День месяца:"), bg='white')
-        self.monthly_label.pack(side="top", pady=2)
-        self.day_month_spin = tk.Spinbox(self.monthly_frame, from_=1, to=31, width=5,
-                                         command=self.update_alarm_from_form)  # 🔥
-        self.day_month_spin.bind("<KeyRelease>", self.update_alarm_from_form)
-        self.day_month_spin.pack(side="top", pady=2)
-        self.monthly_frame.pack(anchor="w", padx=5, pady=(0, 5))
+        # Фрейм для кружков дней недели
+        self.days_frame = tk.Frame(right_frame, bg='white')
+        self.days_frame.pack(anchor="w", padx=5, pady=(0, 5))
 
-        self.yearly_frame = tk.Frame(right_frame, bg='white')
-        self.yearly_label = tk.Label(self.yearly_frame, text=self.l10n.get("yearly_date", "Дата"), bg='white')
-        self.yearly_label.pack(side="top", pady=2)
-        self.yearly_date_entry = DateEntry(self.yearly_frame, date_pattern="y-mm-dd", state="normal")
-        self.yearly_date_entry.pack(side="top", pady=2)
-        self.yearly_date_entry.bind("<<DateEntrySelected>>", self.update_alarm_from_form)  # 🔥
-        self.yearly_frame.pack(anchor="w", padx=5, pady=(0, 5))
+        # Массив булевых переменных для дней
+        self.days_vars = [tk.BooleanVar(value=False) for _ in range(7)]
+        days_short = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
 
+        # Цветовая схема для кружков
+        self.day_colors = {
+            "on_bg": "#0078D7",
+            "on_fg": "white",
+            "off_bg": "white",
+            "off_fg": "black",
+            "border": "#0078D7"
+        }
+
+        self.day_labels = []
+        for i, day in enumerate(days_short):
+            lbl = tk.Label(
+                self.days_frame,
+                text=day,
+                width=3,
+                height=1,
+                font=("Arial", 10, "bold"),
+                bg=self.day_colors["off_bg"],
+                fg=self.day_colors["off_fg"],
+                bd=1,
+                relief="solid",
+                highlightthickness=1,
+                highlightbackground=self.day_colors["border"],
+                cursor="hand2"
+            )
+            lbl.pack(side="left", padx=3, pady=4)
+            lbl.var = self.days_vars[i]
+            lbl.index = i
+            self.day_labels.append(lbl)
+
+            # Эффект увеличения кружочка при клике
+            lbl.bind("<Enter>", lambda e, l=lbl: l.config(font=("Arial", 11, "bold")))
+            lbl.bind("<Leave>", lambda e, l=lbl: l.config(font=("Arial", 10, "bold")))
+
+            def toggle_day(event, label=lbl):
+                current = not label.var.get()
+                label.var.set(current)
+                label.config(
+                    bg=self.day_colors["on_bg"] if current else self.day_colors["off_bg"],
+                    fg=self.day_colors["on_fg"] if current else self.day_colors["off_fg"]
+                )
+                self.update_repeat_text()
+                self.update_alarm_from_form()
+
+            lbl.bind("<Button-1>", toggle_day)
+
+        # переменная для хранения датыф
+        self.selected_date = datetime.now().date()
+
+        # обновим текст о повторах
+        self.update_repeat_text()
+
+        # блок выбора мелодии
         self.melody_label = tk.Label(right_frame, text=self.l10n.get("melody", "Мелодия:"), bg='white',
                                      font=("Arial", 10, "bold"))
         self.melody_label.pack(anchor="w", padx=5, pady=(5, 2))
@@ -291,23 +350,91 @@ class AlarmsSettingsWindow:
         self.edit_note_btn.pack(side="left", padx=5)
         self.notification_frame.pack(fill="x", padx=5, pady=(0, 5))
 
-        self.update_repeat_fields()
+    def update_repeat_text(self):
+        """Обновляет текст описания повторений"""
+        selected_days = [day for day, var in zip(
+            ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"], self.days_vars
+        ) if var.get()]
 
-    def update_repeat_fields(self, event=None):
-        # Обновление полей в зависимости от типа повтора
-        repeat = self.repeat_var.get()
-        self.date_frame.pack_forget()
-        self.weekly_frame.pack_forget()
-        self.monthly_frame.pack_forget()
-        self.yearly_frame.pack_forget()
-        if repeat == self.l10n.get("once"):
-            self.date_frame.pack(anchor="w", padx=5, pady=(0, 5))
-        elif repeat == self.l10n.get("weekly"):
-            self.weekly_frame.pack(anchor="w", padx=5, pady=(0, 5))
-        elif repeat == self.l10n.get("monthly"):
-            self.monthly_frame.pack(anchor="w", padx=5, pady=(0, 5))
-        elif repeat == self.l10n.get("yearly"):
-            self.yearly_frame.pack(anchor="w", padx=5, pady=(0, 5))
+        if len(selected_days) == 0:
+            date_str = self.selected_date.strftime("%Y-%m-%d")
+            self.repeat_text.set(f"Один раз — {date_str}")
+        elif len(selected_days) == 7:
+            self.repeat_text.set("Ежедневно")
+        else:
+            self.repeat_text.set("Каждый: " + ", ".join(selected_days))
+
+        # --- Плавная подсветка текста при изменении ---
+        def flash_label(step=0):
+            # постепенный переход от синего к черному
+            if step <= 10:
+                color = f"#{int(0 + (step * 25)):02x}{int(120 + step * 10):02x}{int(215 - step * 10):02x}"
+                self.repeat_label.config(fg=color)
+                self.win.after(30, lambda: flash_label(step + 1))
+            else:
+                self.repeat_label.config(fg="black")
+
+        flash_label()
+
+    def choose_date(self):
+        """Показ встроенного календаря (как на скриншоте)"""
+        # Если календарь уже открыт — просто закрываем
+        if hasattr(self, "popup_cal") and self.popup_cal.winfo_exists():
+            self.popup_cal.destroy()
+            return
+
+        # Создаём всплывающее окно
+        self.popup_cal = tk.Toplevel(self.win)
+        self.popup_cal.overrideredirect(True)
+        self.popup_cal.configure(bg="white")
+
+        # Позиция под кнопкой 📅
+        bx = self.date_btn.winfo_rootx()
+        by = self.date_btn.winfo_rooty() + self.date_btn.winfo_height()
+        self.popup_cal.geometry(f"+{bx}+{by}")
+
+        # Сам календарь
+        cal = Calendar(
+            self.popup_cal,
+            selectmode="day",
+            year=self.selected_date.year,
+            month=self.selected_date.month,
+            day=self.selected_date.day,
+            date_pattern="y-mm-dd",
+            background="white",
+            foreground="black",
+            selectbackground="#0078D7",
+            selectforeground="white",
+            weekendbackground="white"
+        )
+        cal.pack(padx=5, pady=5)
+
+        # При выборе даты сохраняем и закрываем
+        def save_date(event=None):
+            for var in self.days_vars:
+                var.set(False)
+            self.selected_date = cal.selection_get()
+            self.update_repeat_text()
+            self.update_alarm_from_form()
+            self.popup_cal.destroy()
+
+        cal.bind("<<CalendarSelected>>", save_date)
+
+        # Закрываем при клике вне календаря
+        def close_on_click_outside(event):
+            if not getattr(self, "popup_cal", None):
+                return
+            try:
+                if not (
+                        self.popup_cal.winfo_rootx() <= event.x_root <= self.popup_cal.winfo_rootx() + self.popup_cal.winfo_width()
+                        and self.popup_cal.winfo_rooty() <= event.y_root <= self.popup_cal.winfo_rooty() + self.popup_cal.winfo_height()
+                ):
+                    if self.popup_cal.winfo_exists():
+                        self.popup_cal.destroy()
+            except tk.TclError:
+                pass
+
+        self.win.bind("<Button-1>", close_on_click_outside, add="+")
 
     def update_active_color(self, *args):
         # Обновление цвета переключателя активности
@@ -351,16 +478,13 @@ class AlarmsSettingsWindow:
         self.min_spin.insert(0, time_parts[1])
 
         self.timezone_combo.set(alarm.get("timezone", "Europe/Moscow"))
-        self.repeat_var.set(alarm.get("repeat", "once"))
 
         for i, var in enumerate(self.days_vars):
             var.set(alarm.get("days", [False] * 7)[i])
 
-        self.day_month_spin.delete(0, tk.END)
-        self.day_month_spin.insert(0, alarm.get("day_month", "1"))
-
         self.date_entry.set_date(
             datetime.strptime(alarm.get("date", datetime.now().strftime("%Y-%m-%d")), "%Y-%m-%d").date())
+        self.update_repeat_text()
         self.yearly_date_entry.set_date(
             datetime.strptime(alarm.get("date", datetime.now().strftime("%Y-%m-%d")), "%Y-%m-%d").date())
 
@@ -369,7 +493,6 @@ class AlarmsSettingsWindow:
         self.notification_entry.insert(0, alarm.get("notification", ""))
 
         self.update_active_color()
-        self.update_repeat_fields()
 
     def add_alarm(self):
         # Добавление нового будильника с временем +1 час
@@ -458,26 +581,7 @@ class AlarmsSettingsWindow:
         if file_path:
             self.melody_var.set(file_path)
 
-    def open_timer_dialog(self):
-        # Открытие диалога для создания таймера
-        dialog = tk.Toplevel(self.win)
-        dialog.title(self.l10n.get("timer", "Таймер"))
-        dialog.configure(bg='white')
-        geom = ToolTip.position_dialog(self, self.btn_timer)
-        dialog.geometry(geom)
-        dialog.transient(self.win)
 
-        tk.Label(dialog, text="Часы:", bg='white').pack(pady=5)
-        hours_spin = tk.Spinbox(dialog, from_=0, to=23, width=5)
-        hours_spin.pack(pady=5)
-        hours_spin.delete(0, tk.END)
-        hours_spin.insert(0, "1")
-
-        tk.Label(dialog, text="Минуты:", bg='white').pack(pady=5)
-        mins_spin = tk.Spinbox(dialog, from_=0, to=59, width=5)
-        mins_spin.pack(pady=5)
-        mins_spin.delete(0, tk.END)
-        mins_spin.insert(0, "0")
 
         def start_timer():
             hours = int(hours_spin.get())
@@ -567,11 +671,8 @@ class AlarmsSettingsWindow:
             self.min_spin.delete(0, tk.END)
             self.min_spin.insert(0, "00")
             self.timezone_combo.set(self.cfg["clocks"][0]["timezone"] if self.cfg.get("clocks") else "Europe/Moscow")
-            self.repeat_var.set("once")
             for var in self.days_vars:
                 var.set(False)
-            self.day_month_spin.delete(0, tk.END)
-            self.day_month_spin.insert(0, "1")
             self.date_entry.set_date(datetime.now().date())
             self.yearly_date_entry.set_date(datetime.now().date())
             self.melody_var.set("default")
@@ -644,9 +745,7 @@ class AlarmsSettingsWindow:
             alarm["active"] = self.active_var.get()
             alarm["time"] = f"{self.hour_spin.get()}:{self.min_spin.get()}"
             alarm["timezone"] = self.timezone_combo.get()
-            alarm["repeat"] = self.repeat_var.get()
-            alarm["day_month"] = self.day_month_spin.get()
-            alarm["date"] = str(self.date_entry.get_date())
+            alarm["date"] = str(self.selected_date)
             alarm["melody"] = self.melody_var.get()
             alarm["notification"] = self.notification_entry.get()
             alarm["days"] = [var.get() for var in self.days_vars]  # <-- добавь это!
@@ -655,11 +754,11 @@ class AlarmsSettingsWindow:
     def set_form_state(self, enabled=True):
         state = "normal" if enabled else "disabled"
         widgets = [
-            self.name_entry, self.hour_spin, self.min_spin, self.timezone_combo,
-            self.repeat_combo, self.day_month_spin, self.date_entry,
-            self.yearly_date_entry, self.melody_combo, self.choose_melody_btn,
-            self.notification_entry, self.edit_note_btn
-        ]
+            self.name_entry, self.hour_spin, self.min_spin,
+            self.timezone_combo, self.melody_combo,
+            self.choose_melody_btn, self.notification_entry,
+            self.edit_note_btn]
+
         for w in widgets:
             try:
                 w.config(state=state)

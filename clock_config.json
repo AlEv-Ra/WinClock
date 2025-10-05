@@ -33,9 +33,9 @@
     {
       "name": "вямо",
       "active": true,
-      "time": "00:07",
+      "time": "00:00",
       "timezone": "",
-      "repeat": "once",
+      "repeat": "Ежемесячно",
       "days": [
         false,
         false,
@@ -46,16 +46,16 @@
         false
       ],
       "day_month": "1",
-      "date": "2025-10-02",
+      "date": "2025-10-16",
       "melody": "default",
       "notification": ""
     },
     {
       "name": "Будильник",
       "active": true,
-      "time": "00:07",
+      "time": "00:00",
       "timezone": "",
-      "repeat": "once",
+      "repeat": "Еженедельно",
       "days": [
         false,
         false,
@@ -66,12 +66,12 @@
         false
       ],
       "day_month": "1",
-      "date": "2025-10-02",
+      "date": "2025-10-06",
       "melody": "default",
       "notification": ""
     }
   ],
   "language": "ru",
   "settings_window": "644x733+1994+832",
-  "alarms_window": "802x636+1999+613"
+  "alarms_window": "608x610+2333+621"
 }
